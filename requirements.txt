@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+websockets
+vnstock
+pandas
+openpyxl
+numpy
+requests
+pandas-ta
+playwright
+apscheduler
