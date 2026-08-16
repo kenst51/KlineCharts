@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Thông tin Doanh nghiệp</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg-color: #131722;
+            --text-color: #d1d4dc;
+            --text-secondary: #8b92a5;
+            --border-color: #2a2e39;
+            --accent-blue: #2962ff;
+            --accent-green: #089981;
+            --accent-red: #f23645;
+            --card-bg: rgba(255,255,255,0.03);
+            --card-border: 1px solid var(--border-color);
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+        }
+        .container { max-width: 1300px; margin: 0 auto; }
+        h1 { margin-top: 0; color: #fff; border-bottom: 1px solid var(--border-color); padding-bottom: 15px; margin-bottom: 20px; font-size: 24px; }
+        
+        .card { background: var(--card-bg); border: var(--card-border); border-radius: 8px; padding: 20px; margin-bottom: 20px; }
+        .card-title { font-size: 16px; font-weight: bold; margin-bottom: 15px; color: #fff; display: flex; align-items: center; justify-content: space-between; }
+        
+        /* Grid Layout */
+        .dashboard-grid { display: grid; grid-template-columns: 65% 35%; gap: 20px; align-items: start; }
+        @media (max-width: 1000px) { .dashboard-grid { grid-template-columns: 1fr; } }
+        
+        /* Stats */
+        .stat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; }
+        .stat-item { background: rgba(0,0,0,0.2); padding: 12px 15px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.02); }
+        .stat-label { font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; }
+        .stat-value { font-size: 15px; font-weight: 500; color: #fff; }
+        
+        /* Tables */
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 10px 8px; text-align: left; border-bottom: 1px solid var(--border-color); font-size: 13px; }
+        th { color: var(--text-secondary); font-weight: normal; position: sticky; top: 0; background: #1a1e2a; z-index: 10;}
+        td { color: var(--text-color); }
+        .table-responsive { overflow-x: auto; }
+        
+        /* Badges */
+        .badge { padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; white-space: nowrap; }
+        .badge.blue { background: rgba(41,98,255,0.2); color: #2962ff; }
+        .badge.green { background: rgba(8,153,129,0.2); color: #089981; }
+        .badge.orange { background: rgba(255,152,0,0.2); color: #ff9800; }
+        
+        /* Scrollable Cards */
+        .scrollable-card { max-height: 450px; overflow-y: auto; padding-right: 5px; }
+        .scrollable-card::-webkit-scrollbar { width: 4px; height: 4px; }
+        .scrollable-card::-webkit-scrollbar-thumb { background: #363c4e; border-radius: 4px; }
+        .scrollable-card::-webkit-scrollbar-track { background: transparent; }
+        
+        /* News & Events */
+        .news-item { display: flex; gap: 15px; padding: 15px 0; border-bottom: 1px solid var(--border-color); text-decoration: none; color: inherit; transition: opacity 0.2s; }
+        .news-item:first-child { padding-top: 0; }
+        .news-item:last-child { border-bottom: none; padding-bottom: 0; }
+        .news-item:hover { opacity: 0.8; }
+        .news-img { width: 90px; height: 60px; object-fit: cover; border-radius: 6px; flex-shrink: 0; background: rgba(255,255,255,0.05); }
+        .news-title { margin: 0 0 6px 0; font-size: 14px; line-height: 1.4; color: #fff; font-weight: 500;}
+        .news-date { font-size: 11px; color: var(--text-secondary); }
+        
+        .event-item { padding: 12px; border-left: 2px solid var(--accent-blue); margin-bottom: 12px; background: rgba(41,98,255,0.05); border-radius: 0 4px 4px 0; }
+        .event-item:last-child { margin-bottom: 0; }
+        .event-date { font-size: 12px; color: var(--accent-blue); margin-bottom: 6px; font-weight: 600; }
+        .event-title { font-size: 13px; color: #e0e3eb; line-height: 1.4;}
+        
+        .loading { text-align: center; padding: 50px; color: var(--text-secondary); font-size: 15px; }
+        .hidden { display: none !important; }
+        
+        .flex-row { display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap; }
+        .flex-1 { flex: 1; min-width: 250px; }
+        
+        /* Custom tweaks for inner elements */
+        #profileText { line-height: 1.6; font-size: 14px; margin-bottom: 25px; color: #b2b5be; }
+        .sub-card { background: rgba(0,0,0,0.15); border-radius: 6px; border: 1px solid rgba(255,255,255,0.02); overflow: hidden;}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 id="pageTitle">Thông tin Doanh nghiệp</h1>
+        
+        <div id="loading" class="loading">Đang tổng hợp dữ liệu, vui lòng đợi...</div>
+        
+        <div id="dashboard" class="hidden">
+            <!-- HEADER SECTION -->
+            <div class="card">
+                <div class="card-title">Hồ sơ doanh nghiệp</div>
+                <div id="profileText"></div>
+                <div class="stat-grid" id="overviewStats"></div>
+            </div>
+
+            <!-- MAIN GRID -->
+            <div class="dashboard-grid">
+                <!-- LEFT COLUMN -->
+                <div class="left-col">
+                    <!-- Shareholder Section -->
+                    <div class="card">
+                        <div class="card-title">Cơ cấu & Danh sách Cổ đông</div>
+                        <div class="flex-row">
+                            <!-- Chart -->
+                            <div style="width: 220px; height: 220px; flex-shrink: 0; margin: 0 auto;">
+                                <canvas id="shareholderChart"></canvas>
+                            </div>
+                            <!-- Table -->
+                            <div class="flex-1 table-responsive scrollable-card" style="max-height: 250px; border: 1px solid var(--border-color); border-radius: 6px;">
+                                <table>
+                                    <thead>
+                                        <tr><th>Tên cổ đông</th><th>Chức vụ</th><th>Loại</th><th style="text-align:right">Tỷ lệ</th></tr>
+                                    </thead>
+                                    <tbody id="shareholdersBody"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Ecosystem Section -->
+                    <div class="flex-row" style="gap: 20px;">
+                        <div class="card flex-1" style="margin-bottom: 0;">
+                            <div class="card-title">Công ty con</div>
+                            <div class="table-responsive scrollable-card" style="max-height: 250px; border: 1px solid var(--border-color); border-radius: 6px;">
+                                <table>
+                                    <thead><tr><th>Tên công ty</th><th style="text-align:right">Sở hữu</th></tr></thead>
+                                    <tbody id="subsidiariesBody"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="card flex-1" style="margin-bottom: 0;">
+                            <div class="card-title">Công ty liên kết</div>
+                            <div class="table-responsive scrollable-card" style="max-height: 250px; border: 1px solid var(--border-color); border-radius: 6px;">
+                                <table>
+                                    <thead><tr><th>Tên công ty</th><th style="text-align:right">Sở hữu</th></tr></thead>
+                                    <tbody id="affiliatesBody"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- RIGHT COLUMN -->
+                <div class="right-col">
+                    <div class="card">
+                        <div class="card-title">Sự kiện</div>
+                        <div id="eventsList" class="scrollable-card" style="padding-right: 8px;"></div>
+                    </div>
+                    
+                    <div class="card" style="margin-bottom: 0;">
+                        <div class="card-title">Tin tức mới nhất</div>
+                        <div id="newsList" class="scrollable-card" style="padding-right: 8px;"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        let currentSymbol = (urlParams.get('symbol') || 'FPT').toUpperCase();
+        document.getElementById('pageTitle').innerText = `Thông tin Doanh nghiệp: ${currentSymbol}`;
+        let chartInstance = null;
+
+        async function fetchAllData() {
+            try {
+                // Fetch all in parallel for maximum speed
+                const [resDetails, resStruct, resShareholders, resRelations, resEvents, resNews] = await Promise.all([
+                    fetch(`/api/company-details?symbol=${currentSymbol}`).then(r => r.json()).catch(() => ({})),
+                    fetch(`/api/company-shareholder-structure?symbol=${currentSymbol}`).then(r => r.json()).catch(() => ({})),
+                    fetch(`/api/company-shareholders?symbol=${currentSymbol}`).then(r => r.json()).catch(() => ({})),
+                    fetch(`/api/company-relationships?symbol=${currentSymbol}`).then(r => r.json()).catch(() => ({})),
+                    fetch(`/api/company-events?symbol=${currentSymbol}`).then(r => r.json()).catch(() => ({})),
+                    fetch(`/api/company-news?symbol=${currentSymbol}`).then(r => r.json()).catch(() => ({}))
+                ]);
+
+                // 1. Overview
+                if (resDetails.successful && resDetails.data) {
+                    const d = resDetails.data;
+                    document.getElementById('profileText').innerHTML = d.profile || 'Chưa có thông tin giới thiệu.';
+                    const listingInfo = d.listing || {};
+                    let listingDateStr = d.listingDate || listingInfo.listingDate || '-';
+                    if (listingDateStr !== '-' && listingDateStr.includes('T')) {
+                        listingDateStr = new Date(listingDateStr).toLocaleDateString('vi-VN');
+                    }
+                    const charterCapital = d.numberOfSharesMktCap ? (d.numberOfSharesMktCap * 10000 / 1e9) : (listingInfo.charterCapital/1e9 || 0);
+                    
+                    document.getElementById('overviewStats').innerHTML = `
+                        <div class="stat-item"><div class="stat-label">Ngày niêm yết</div><div class="stat-value">${listingDateStr}</div></div>
+                        <div class="stat-item"><div class="stat-label">Sàn giao dịch</div><div class="stat-value">${listingInfo.comGroupCode || d.comGroupCode || '-'}</div></div>
+                        <div class="stat-item"><div class="stat-label">Lĩnh vực</div><div class="stat-value">${d.sectorVn || d.sector || '-'}</div></div>
+                        <div class="stat-item"><div class="stat-label">Vốn hóa (Tỷ)</div><div class="stat-value">${d.marketCap ? (d.marketCap/1e9).toFixed(2) : '-'}</div></div>
+                        <div class="stat-item"><div class="stat-label">Vốn điều lệ (Tỷ)</div><div class="stat-value">${charterCapital > 0 ? charterCapital.toFixed(2) : '-'}</div></div>
+                        <div class="stat-item"><div class="stat-label">KL Cổ phiếu (Tr)</div><div class="stat-value">${d.numberOfSharesMktCap ? (d.numberOfSharesMktCap/1e6).toFixed(2) : '-'}</div></div>
+                        <div class="stat-item"><div class="stat-label">Free Float</div><div class="stat-value">${d.freeFloatPercentage != null ? (d.freeFloatPercentage * 100).toFixed(2) + '%' : '-'}</div></div>
+                    `;
+                }
+
+                // 2. Shareholder Structure (Chart)
+                if (resStruct.successful && resStruct.data) {
+                    const s = resStruct.data;
+                    const labels = [];
+                    const chartData = [];
+                    const structMap = [
+                        { label: 'Nhà nước', value: s.statePercentage },
+                        { label: 'Nước ngoài', value: s.foreignPercentage },
+                        { label: 'Ban lãnh đạo', value: s.bodPercentage },
+                        { label: 'Tổ chức', value: s.institutionPercentage },
+                        { label: 'Khác', value: s.otherPercentage }
+                    ];
+                    structMap.forEach(item => {
+                        if (item.value > 0) {
+                            labels.push(item.label + ` (${(item.value * 100).toFixed(1)}%)`);
+                            chartData.push(Math.round(item.value * 10000) / 100);
+                        }
+                    });
+                    const ctx = document.getElementById('shareholderChart').getContext('2d');
+                    chartInstance = new Chart(ctx, {
+                        type: 'doughnut',
+                        data: {
+                            labels: labels,
+                            datasets: [{ data: chartData, backgroundColor: ['#2962ff', '#089981', '#ff9800', '#e91e63', '#8b92a5'], borderWidth: 0 }]
+                        },
+                        options: { 
+                            responsive: true, 
+                            maintainAspectRatio: false, 
+                            plugins: { 
+                                legend: { position: 'bottom', labels: { color: '#d1d4dc', font: {size: 11}, padding: 15, usePointStyle: true, boxWidth: 8 } } 
+                            },
+                            cutout: '70%'
+                        }
+                    });
+                }
+
+                // 3. Shareholder List (Table)
+                const tbody = document.getElementById('shareholdersBody');
+                if (resShareholders.successful && Array.isArray(resShareholders.data) && resShareholders.data.length > 0) {
+                    resShareholders.data.forEach(h => {
+                        const isOrg = (h.ownerType === '1' || h.ownerType === 1 || h.ownerType === 'Tổ chức') ? 'blue' : 'green';
+                        const orgLabel = (h.ownerType === '1' || h.ownerType === 1) ? 'Tổ chức' : 'Cá nhân';
+                        tbody.innerHTML += `<tr>
+                            <td style="font-weight:500; font-size:12px; max-width: 150px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${h.ownerName || '-'}">${h.ownerName || '-'}</td>
+                            <td style="font-size:12px; max-width: 100px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${h.positionName || '-'}">${h.positionName || '-'}</td>
+                            <td><span class="badge ${isOrg}">${orgLabel}</span></td>
+                            <td style="text-align:right; font-weight:bold; color: #fff;">${h.percentage != null ? (h.percentage * 100).toFixed(2) + '%' : '-'}</td>
+                        </tr>`;
+                    });
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:var(--text-secondary); padding: 20px;">Không có dữ liệu</td></tr>';
+                }
+
+                // 4. Relationships (Subsidiaries & Affiliates)
+                const renderRow = (c) => {
+                    const pct = c.ownedPercentage != null ? c.ownedPercentage : 0;
+                    const badgeColor = pct >= 0.5 ? 'green' : 'orange';
+                    return `<tr>
+                        <td style="font-weight: 500;">${c.rightOrganNameVi || c.rightTicker || '-'}</td>
+                        <td style="text-align:right"><span class="badge ${badgeColor}">${(pct * 100).toFixed(2)}%</span></td>
+                    </tr>`;
+                };
+                
+                const subBody = document.getElementById('subsidiariesBody');
+                if (resRelations.successful && resRelations.data && resRelations.data.subsidiaries && resRelations.data.subsidiaries.length > 0) {
+                    resRelations.data.subsidiaries.forEach(c => subBody.innerHTML += renderRow(c));
+                } else {
+                    subBody.innerHTML = '<tr><td colspan="2" style="text-align:center; color:var(--text-secondary); padding: 20px;">Không có dữ liệu</td></tr>';
+                }
+                
+                const affBody = document.getElementById('affiliatesBody');
+                if (resRelations.successful && resRelations.data && resRelations.data.affiliates && resRelations.data.affiliates.length > 0) {
+                    resRelations.data.affiliates.forEach(c => affBody.innerHTML += renderRow(c));
+                } else {
+                    affBody.innerHTML = '<tr><td colspan="2" style="text-align:center; color:var(--text-secondary); padding: 20px;">Không có dữ liệu</td></tr>';
+                }
+
+                // 5. Events
+                const tl = document.getElementById('eventsList');
+                const evItems = (resEvents.data && resEvents.data.content) ? resEvents.data.content : (Array.isArray(resEvents.data) ? resEvents.data : []);
+                if (evItems.length > 0) {
+                    evItems.forEach(e => {
+                        const dateStr = e.publicDate ? new Date(e.publicDate).toLocaleDateString('vi-VN') : '-';
+                        const title = e.eventTitleVi || e.eventNameVi || 'Sự kiện';
+                        const cat = e.eventNameVi || e.category || 'Khác';
+                        tl.innerHTML += `<div class="event-item">
+                            <div class="event-date">${dateStr}</div>
+                            <div class="event-title"><span class="badge blue" style="margin-right:5px; margin-bottom:5px; display:inline-block;">${cat}</span> ${title}</div>
+                        </div>`;
+                    });
+                } else {
+                    tl.innerHTML = '<div style="padding:20px; color:var(--text-secondary); text-align:center;">Chưa có sự kiện nào.</div>';
+                }
+
+                // 6. News
+                const nl = document.getElementById('newsList');
+                const newsItems = (resNews.data && resNews.data.content) ? resNews.data.content : (Array.isArray(resNews.data) ? resNews.data : []);
+                if (newsItems.length > 0) {
+                    newsItems.forEach(n => {
+                        const imgUrl = n.newsImageUrl || '';
+                        const title = n.newsTitle || '';
+                        const date = n.publicDate ? new Date(n.publicDate).toLocaleDateString('vi-VN') : '';
+                        const link = n.newsSourceLink || ('https://www.google.com/search?q=' + encodeURIComponent(title + ' ' + currentSymbol));
+                        nl.innerHTML += `<a href="${link}" target="${link !== '#' ? '_blank' : '_self'}" class="news-item">
+                            ${imgUrl ? `<img class="news-img" src="${imgUrl}" alt="News" onerror="this.style.display='none'">` : ''}
+                            <div>
+                                <h3 class="news-title">${title}</h3>
+                                <div class="news-date">${date}</div>
+                            </div>
+                        </a>`;
+                    });
+                } else {
+                    nl.innerHTML = '<div style="padding:20px; color:var(--text-secondary); text-align:center;">Chưa có tin tức nào.</div>';
+                }
+
+            } catch (e) {
+                console.error("Lỗi khi tải dữ liệu:", e);
+                document.getElementById('loading').innerText = "Đã xảy ra lỗi khi tải dữ liệu. Vui lòng thử lại.";
+                return;
+            }
+
+            // Hide loading, show dashboard
+            document.getElementById('loading').classList.add('hidden');
+            document.getElementById('dashboard').classList.remove('hidden');
+        }
+
+        // Start fetching immediately
+        fetchAllData();
+    </script>
+</body>
+</html>

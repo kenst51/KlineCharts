@@ -33,10 +33,10 @@ import os
 
 # Tải trước bộ dữ liệu ICB cục bộ (để đạt tốc độ 0ms)
 try:
-    with open('sectors_mapping.json', 'r', encoding='utf-8') as f:
+    with open('fialda_stock_mapping.json', 'r', encoding='utf-8') as f:
         sectors_mapping = json.load(f)
 except Exception as e:
-    print(f"Warning: Không thể đọc sectors_mapping.json: {e}")
+    print(f"Warning: Không thể đọc fialda_stock_mapping.json: {e}")
     sectors_mapping = {}
 
 class RRGRequest(BaseModel):
@@ -1653,8 +1653,14 @@ def setup_scheduler():
     scheduler.start()
     print("[Cron] Scheduler đã bắt đầu. Lịch cập nhật Fialda: 00:00 Chủ Nhật.")
 
-app.mount("/", StaticFiles(directory="static", html=True), name="static")
+@app.get("/")
+def read_root():
+    import os
+    if not os.path.exists("static/index.html"):
+        return {"error": "static/index.html not found! Vui lòng đảm bảo bạn đã tải thư mục 'static' lên GitHub."}
+    return FileResponse("static/index.html")
 
+app.mount("/", StaticFiles(directory="static"), name="static")
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=8890, reload=True)
