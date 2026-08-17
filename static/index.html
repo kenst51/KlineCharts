@@ -2644,6 +2644,18 @@ klinecharts.registerOverlay({
                 if (Math.abs(value) >= 1e6) return (value / 1e6).toFixed(2) + 'M';
                 if (Math.abs(value) >= 1e3) return (value / 1e3).toFixed(1) + 'K';
                 return String(value);
+            },
+            formatDate: (dateTimeFormat, timestamp, dataFormat, type) => {
+                const d = new Date(timestamp);
+                const YYYY = d.getFullYear();
+                const MM = String(d.getMonth() + 1).padStart(2, '0');
+                const DD = String(d.getDate()).padStart(2, '0');
+                if (d.getHours() === 0 && d.getMinutes() === 0) {
+                    return `${YYYY}-${MM}-${DD}`;
+                }
+                const HH = String(d.getHours()).padStart(2, '0');
+                const mm = String(d.getMinutes()).padStart(2, '0');
+                return `${YYYY}-${MM}-${DD} ${HH}:${mm}`;
             }
         };
         
@@ -2954,6 +2966,61 @@ klinecharts.registerOverlay({
                 runChannelDetection(targetChart);
             }
         }
+        
+        function aggregateCandles(dailyData, resolution) {
+            if (!['1W', '1M', '1Y'].includes(resolution)) return dailyData;
+            if (!dailyData || dailyData.length === 0) return [];
+            
+            const result = [];
+            let currentCandle = null;
+            let currentKey = null;
+
+            for (let i = 0; i < dailyData.length; i++) {
+                const d = dailyData[i];
+                const date = new Date(d.timestamp);
+                let key;
+                let normalizedTimestamp = d.timestamp;
+                
+                if (resolution === '1W') {
+                    const day = date.getDay();
+                    const diff = date.getDate() - day + (day === 0 ? -6 : 1);
+                    const monday = new Date(date.getFullYear(), date.getMonth(), diff);
+                    monday.setHours(0, 0, 0, 0);
+                    normalizedTimestamp = monday.getTime();
+                    key = monday.getFullYear() + '-' + monday.getMonth() + '-' + monday.getDate();
+                } else if (resolution === '1M') {
+                    const firstDay = new Date(date.getFullYear(), date.getMonth(), 1);
+                    firstDay.setHours(0, 0, 0, 0);
+                    normalizedTimestamp = firstDay.getTime();
+                    key = date.getFullYear() + '-' + date.getMonth();
+                } else if (resolution === '1Y') {
+                    const firstDayOfYear = new Date(date.getFullYear(), 0, 1);
+                    firstDayOfYear.setHours(0, 0, 0, 0);
+                    normalizedTimestamp = firstDayOfYear.getTime();
+                    key = date.getFullYear();
+                }
+
+                if (key !== currentKey) {
+                    if (currentCandle) result.push(currentCandle);
+                    currentCandle = {
+                        timestamp: normalizedTimestamp,
+                        open: d.open,
+                        high: d.high,
+                        low: d.low,
+                        close: d.close,
+                        volume: d.volume
+                    };
+                    currentKey = key;
+                } else {
+                    currentCandle.high = Math.max(currentCandle.high, d.high);
+                    currentCandle.low = Math.min(currentCandle.low, d.low);
+                    currentCandle.close = d.close;
+                    currentCandle.volume += (d.volume || 0);
+                }
+            }
+            if (currentCandle) result.push(currentCandle);
+            return result;
+        }
 
         async function fetchStockData(symbol, chartIdx = 1) {
             try { chartIdx === 1 ? chart1.clearData() : chart2.clearData(); } catch(e) {} // Xoá dữ liệu cũ để reset scale
@@ -2989,17 +3056,23 @@ klinecharts.registerOverlay({
                 };
                 const dRes = resMap[resolution] || "D";
                 
-                const response = await fetch(`/api/vndirect/history?symbol=${symbol}&resolution=${dRes}&from_ts=${startDateUnix}&to_ts=${endDateUnix}`);
+                const response = await fetch(`https://dchart-api.vndirect.com.vn/dchart/history?symbol=${symbol}&resolution=${dRes}&from=${startDateUnix}&to=${endDateUnix}`);
                 if (!response.ok) {
-                    throw new Error(`VNDirect Proxy API Error: ${response.status}`);
+                    throw new Error(`Lỗi gọi trực tiếp API VNDirect: ${response.status}`);
                 }
                 const result = await response.json();
                 
                 if (result.s === "ok" && result.t && result.t.length > 0) {
                     const klineData = [];
                     for (let i = 0; i < result.t.length; i++) {
+                        let ts = result.t[i] * 1000;
+                        if (['1D', '1W', '1M', '1Y'].includes(resolution)) {
+                            const dts = new Date(ts);
+                            dts.setHours(0, 0, 0, 0);
+                            ts = dts.getTime();
+                        }
                         klineData.push({
-                            timestamp: result.t[i] * 1000,
+                            timestamp: ts,
                             open: result.o[i],
                             high: result.h[i],
                             low: result.l[i],
@@ -3009,10 +3082,11 @@ klinecharts.registerOverlay({
                     }
                     
                     try { chartIdx === 1 ? chart1.removeOverlay() : chart2.removeOverlay(); } catch(e) {} // Xoá toàn bộ hình vẽ cũ để Y-axis không bị kéo giãn sai tỷ lệ
-                    if (chartIdx === 1) chart1.applyNewData(klineData);
-                    else chart2.applyNewData(klineData);
+                    const displayData = aggregateCandles(klineData, resolution);
+                    if (chartIdx === 1) chart1.applyNewData(displayData);
+                    else chart2.applyNewData(displayData);
                     
-                    if (chartIdx === 1) window.latestChartData = klineData;
+                    if (chartIdx === 1) window.latestChartData = displayData;
                     renderPerformanceBanner(klineData, chartIdx);
                     
                     try {
@@ -7984,10 +8058,10 @@ var isDivergenceOn = false;
                 document.getElementById('btnToolsSidebar').style.display = '';
                 document.getElementById('currentSymbolDisplay').parentElement.querySelector('.symbol-info-block').style.display = 'flex';
                 
-                if (window.chart) {
-                    window.chart.resize();
+                if (typeof window.chart1 !== 'undefined' && window.chart1 && typeof window.chart1.resize === 'function') {
+                    window.chart1.resize();
                 }
-                if (window.chart2) {
+                if (typeof window.chart2 !== 'undefined' && window.chart2 && typeof window.chart2.resize === 'function') {
                     window.chart2.resize();
                 }
             }

@@ -75,20 +75,7 @@ async def websocket_orderbook(websocket: WebSocket, symbol: str):
 async def startup_event():
     global _symbols_cache
     try:
-        # Fetch symbols on startup to speed up autocomplete using VNDirect API
-        # Only fetch listed stocks, ETFs, IFCs, and CWs to avoid hitting the API's pagination limits
-        res = requests.get('https://api-finfo.vndirect.com.vn/v4/stocks?q=type:STOCK,ETF,IFC,CW~status:listed&size=9999', headers={'User-Agent': 'Mozilla/5.0'})
-        if res.status_code == 200:
-            data = res.json().get('data', [])
-            for row in data:
-                _symbols_cache.append({
-                    "symbol": row.get('code', ''),
-                    "name": row.get('companyName') or row.get('shortName') or '',
-                    "type": "stock" if row.get('type') == 'STOCK' else "warrant" if row.get('type') == 'CW' else "fund",
-                    "exchange": row.get('floor', 'HSX')
-                })
-            
-        # Add common indices and derivatives
+        # Add common indices and derivatives first
         extras = [
             {"symbol": "VNINDEX", "name": "Chỉ số VN-Index", "type": "index", "exchange": "HSX"},
             {"symbol": "VN30", "name": "Chỉ số VN30", "type": "index", "exchange": "HSX"},
@@ -100,12 +87,22 @@ async def startup_event():
             {"symbol": "FUEVFVND", "name": "Quỹ ETF VFMVN DIAMOND", "type": "fund", "exchange": "HSX"},
             {"symbol": "E1VFVN30", "name": "Quỹ ETF VFMVN30", "type": "fund", "exchange": "HSX"}
         ]
-        
-        existing_symbols = {item['symbol'] for item in _symbols_cache}
-        for ext in extras:
-            if ext['symbol'] not in existing_symbols:
-                _symbols_cache.append(ext)
-                
+        _symbols_cache.extend(extras)
+
+        # Fetch symbols on startup to speed up autocomplete using VNDirect API
+        res = requests.get('https://api-finfo.vndirect.com.vn/v4/stocks?q=type:STOCK,ETF,IFC,CW~status:listed&size=9999', headers={'User-Agent': 'Mozilla/5.0'}, timeout=10)
+        if res.status_code == 200:
+            data = res.json().get('data', [])
+            existing_symbols = {item['symbol'] for item in _symbols_cache}
+            for row in data:
+                sym = row.get('code', '')
+                if sym and sym not in existing_symbols:
+                    _symbols_cache.append({
+                        "symbol": sym,
+                        "name": row.get('companyName') or row.get('shortName') or '',
+                        "type": "stock" if row.get('type') == 'STOCK' else "warrant" if row.get('type') == 'CW' else "fund",
+                        "exchange": row.get('floor', 'HSX')
+                    })
     except BaseException as e:
         print("Could not load symbols on startup:", e)
 
